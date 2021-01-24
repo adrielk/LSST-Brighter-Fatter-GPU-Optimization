@@ -1,0 +1,2 @@
+"/sw/centos/gcc/current/bin/gcc-ar" cr libfoo.a  CMakeFiles/foo.dir/foo.cpp.o
+"/sw/centos/gcc/current/bin/gcc-ranlib" libfoo.a

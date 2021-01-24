@@ -1,0 +1,6 @@
+How to build Cmake
+
+mkdir build
+cd build
+cmake ..
+make

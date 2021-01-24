@@ -1,0 +1,10 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/u/ak6fnm/NVIDIA_CUDA-11.0_Samples/7_CUDALibraries/boxFilterNPP/build/CMakeFiles/_CMakeLTOTest-CXX/src/foo.cpp
+
