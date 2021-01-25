@@ -50,9 +50,10 @@ long long start_timer();
 long long stop_timer(long long start_time, const char* name);
 void fillKernelArray(std::string kernelName, Npp32f* kernelArr, int kernelSize);
 
-int R = 4176;
-int C = 2048;
-int N = R * C;
+/*Image size constants */
+const int R = 4176;
+const int C = 2048; 
+const int N = R * C;
 
 inline int cudaDeviceInit(int argc, const char **argv)
 {
@@ -105,7 +106,7 @@ void fillKernelArray(std::string kernelName, Npp32f* kernelArr, int kernelSize) 
 
     // opening file
     file.open(filename.c_str());
-    float sum = 0;
+    //float sum = 0;
 
     // extracting words from the file
     if (file.is_open()) {
@@ -115,9 +116,9 @@ void fillKernelArray(std::string kernelName, Npp32f* kernelArr, int kernelSize) 
             char char_array[n + 1];
             strcpy(char_array, word.c_str());
             char* pEnd;
-            float wordfloat = strtod(char_array, &pEnd);
+            double wordfloat = strtod(char_array, &pEnd);
             kernelArr[i] = wordfloat;
-            sum += wordfloat;
+            //sum += wordfloat;
         }
 
     }
@@ -147,12 +148,12 @@ long long meanSquaredImages(float* img1, float* img2, int imgSize) {
 }
 
 /*Gets average value of a pixel in a given image/array*/
-long long avgPixelValue(float* img, int imgSize) {
+long avgPixelValue(float* img, int imgSize) {
     long long sum = 0;
     for (int i = 0;i < imgSize;i++) {
-        sum += img[i];
+        sum += (long long)img[i];
     }
-    long long avg = sum / imgSize;
+    long avg = (long)sum / ((long)imgSize);
     return avg;
 }
 
@@ -307,7 +308,10 @@ int main(int argc, char *argv[])
 
         //does this not convolve the edges?(Double check this)
         NppiSize oSizeROI = { imgDimX, imgDimY };//{ imgDimX - kernelSize.width+1, imgDimY - kernelSize.height+1 };//{imgDimX, imgDimY};
-        
+        NppiSize oSrcSize = { imgDimX, imgDimY };
+        NppiPoint oSrcOffset = {0,0};//not exactly sure what this does...
+        NppiBorderType eBorderType = NPP_BORDER_REPLICATE;
+
         npp::ImageNPP_32f_C1 oDeviceDst(oSizeROI.width, oSizeROI.height);//Device memory for convolved (output) image
         npp::ImageCPU_32f_C1 oHostDst(oDeviceDst.size());//Host memory destination for resulting image
         NppiPoint oAnchor = { kernelSize.width / 2, kernelSize.height / 2 }; //oAnchor is the point on the kernel we use to determine its position relative to the image
@@ -323,6 +327,7 @@ int main(int argc, char *argv[])
         std::cout << "Loaded PGM Image Data First row vs Image Data from Text File: " << hostKSize << std::endl;
 
 
+        //Npp32f* deviceKernel;
         Npp32f* deviceKernel;
         size_t deviceKernelPitch;
  
@@ -383,37 +388,27 @@ int main(int argc, char *argv[])
 
 
         //**DEVICE VARIABLES**//       
-        float* grad_host = (float*)malloc(grad_N * sizeof(float));
         float* gradTmp_dev_0 = 0;
         float* gradTmp_dev_1 = 0;
         float* gradOut_dev_0 = 0;
         float* gradOut_dev_1 = 0;
         float* first = 0;
-        float* first_host = (float*)malloc(first_N * sizeof(float));
 
-        float* diff_host = (float*)malloc(diffOut20_N * sizeof(float));
         float* diffOut20 = 0;
         float* diffOut21 = 0;
         float* diffOut20_temp = 0;
         float* diffOut21_temp = 0;
         float* second = 0;
-        float* second_host = (float*)malloc(second_N* sizeof(float));
     
         float* corr = 0;
         float* corr_host = (float*)malloc(N * sizeof(float));//host memory to finish computation of diff and comparison with threshold
 
         float* tmpArray = 0;
-        float* tmpArray_host = (float*)malloc(N * sizeof(float));//new float[imgSize];//for debugging
         float* tmpArray_spliced = 0;
-        float* spliced_arr_host = (float*)malloc(N * sizeof(float));
-        float* device_src = new float[imgSize];
-        bool copy_succ = 0;
 
         float* outArray = 0;
-        float* outArray_host = (float*)malloc(N * sizeof(float));
         float* outArray_spliced = 0;
         float* prev_image = 0; //previous tmpArray (float check initilized to zero?
-        float* prev_image_host = (float*)malloc(N * sizeof(float));//new float[imgSize];//for debugging
 
         float* diff_arr = 0;
         float* diff_arrHost = (float*)malloc(blocksPerGrid * sizeof(float));//host memory to finish computation of diff and comparison with threshold
@@ -577,19 +572,40 @@ int main(int argc, char *argv[])
 	    for(int i = 0 ;i<maxIter;i++){
 
 	        std::cout<<"Iteration: "<<i<<std::endl;
-            //previous outArray: oDeviceDst.data()
+
+            /*Single Channel Filter for 32 bit image and 32 bit kernel 
+            (precision loss possible, since kernel from LSST code is originally 64 bit)
+
+            
+                Docs: https://docs.nvidia.com/cuda/npp/group__image__filter.html#gaf354d8f2b2c134503abaee1f004cef37
+            */
+            
+            /*output of convolution array = oDeviceDst.data()*/
             eStatusNPP = nppiFilter_32f_C1R(tmpArray, devPitch, oDeviceDst.data(),
                 dstPitch, oSizeROI, deviceKernel, kernelSize, oAnchor);
+            
+            /*Single Channel Filter for 64 bit image and 64 bit kernel
+
+                Docs: https://docs.nvidia.com/cuda/npp/group__image__filter.html#gaf354d8f2b2c134503abaee1f004cef37
+            */
+            
+            /*eStatusNPP = nppiFilter_64f_C1R(tmpArray, devPitch, oDeviceDst.data(),
+                dstPitch, oSizeROI, deviceKernel, kernelSize, oAnchor);
+            */
+
+            /*32 bit image and 32 bit kernel with border control
+            
+                Docs: https://docs.nvidia.com/cuda/npp/group__image__filter__border__32f.html
+            */
+
+            /*eStatusNPP = nppiFilterBorder_32f_C1R(tmpArray, devPitch, oSrcSize, oSrcOffset, oDeviceDst.data()
+                , dstPitch, oSizeROI, deviceKernel, kernelSize, oAnchor, eBorderType);
+             */
+             //to do: adjust oSizeROI to avoid edges
 
             cudaDeviceSynchronize();//intended to ensure all previous steps are completed before the next step
 
-            outArray = oDeviceDst.data();//this is just a pointer, for readability.(This is never changed)
-
-            cudaStatus = cudaMemcpy(outArray_host, outArray, sizeof(float) * N, cudaMemcpyDeviceToHost);
-            if (cudaStatus != cudaSuccess) {
-                fprintf(stderr, "init tmpArray cudaMemcpy failed!");
-                goto Error;
-            }
+            //outArray = oDeviceDst.data();//this is just a pointer, for readability.(This is never changed)
 
 
             /*
@@ -599,24 +615,21 @@ int main(int argc, char *argv[])
                     tmp_spliced = tmpArray[startY:endY, startX:endX]
                     out_spliced = outArray[startY:endY, startX:endX]
 
+                    Dimensions of spliced arrays: Rows = 4159, Columns = 2031
+
             */
             CudaWrapper::MatrixGradientSplice_Device(tmpArray_spliced, tmpArray);
-            CudaWrapper::MatrixGradientSplice_Device(outArray_spliced, outArray);
+            CudaWrapper::MatrixGradientSplice_Device(outArray_spliced, oDeviceDst.data());
 
             cudaDeviceSynchronize();
-
-
-            //saving spliced version of gradTmp_dev_0 for debugging
-            cudaStatus = cudaMemcpy(spliced_arr_host, tmpArray_spliced, sizeof(float) * grad_N, cudaMemcpyDeviceToHost);
-            if (cudaStatus != cudaSuccess) {
-                fprintf(stderr, "init tmpArray cudaMemcpy failed!");
-                goto Error;
-            }
 
             /*gradient computation. GPU implementation of:
 
                 gradTmp = numpy.gradient(tmp_spliced)
                 gradOut = numpy.gradient(out_spliced)
+
+                Dimensions of gradients: Rows = 4159, Columns = 2031
+
             */
             CudaWrapper::MatrixGradientSplice_2D_RowDevice(gradTmp_dev_0, tmpArray_spliced);
             CudaWrapper::MatrixGradientSplice_2D_ColDevice(gradTmp_dev_1, tmpArray_spliced);
@@ -625,75 +638,36 @@ int main(int argc, char *argv[])
 
             cudaDeviceSynchronize();
 
-            cudaStatus = cudaMemcpy(tmpArray_host, tmpArray, sizeof(float) * N, cudaMemcpyDeviceToHost);
-            if (cudaStatus != cudaSuccess) {
-                fprintf(stderr, "diff_arrHost cudaMemcpy failed!");
-                goto Error;
-            }
-
-            cudaStatus = cudaMemcpy(grad_host, gradTmp_dev_0, sizeof(float) * grad_N, cudaMemcpyDeviceToHost);
-            if (cudaStatus != cudaSuccess) {
-                fprintf(stderr, "diff_arrHost cudaMemcpy failed!");
-                goto Error;
-            }
-            cudaStatus = cudaMemcpy(grad_host, gradTmp_dev_1, sizeof(float) * grad_N, cudaMemcpyDeviceToHost);
-            if (cudaStatus != cudaSuccess) {
-                fprintf(stderr, "diff_arrHost cudaMemcpy failed!");
-                goto Error;
-            }
-            cudaStatus = cudaMemcpy(grad_host, gradOut_dev_0, sizeof(float) * grad_N, cudaMemcpyDeviceToHost);
-            if (cudaStatus != cudaSuccess) {
-                fprintf(stderr, "diff_arrHost cudaMemcpy failed!");
-                goto Error;
-            }
-            cudaStatus = cudaMemcpy(grad_host, gradOut_dev_1, sizeof(float) * grad_N, cudaMemcpyDeviceToHost);
-            if (cudaStatus != cudaSuccess) {
-                fprintf(stderr, "diff_arrHost cudaMemcpy failed!");
-                goto Error;
-            }
-
             /*first array calculation. GPU implementation of:
 
                 first = (gradTmp[0]*gradOut[0] + gradTmp[1]*gradOut[1])[1:-1, 1:-1]
+                
+                Dimensions of first array: Rows = 4157, Columns = 2029
+
             */
             CudaWrapper::MatrixGradientProductSum_Device(first, gradTmp_dev_0, gradTmp_dev_1, gradOut_dev_0, gradOut_dev_1);
             
-            cudaStatus = cudaMemcpy(first_host, first, sizeof(float) * first_N, cudaMemcpyDeviceToHost);
-            if (cudaStatus != cudaSuccess) {
-                fprintf(stderr, "diff_arrHost cudaMemcpy failed!");
-                goto Error;
-            }
-
-
            /*diff computation. GPU implementation of:
 
                 diffOut20 = numpy.diff(outArray, 2, 0)[startY:endY, startX + 1:endX - 1]
                 diffOut21 = numpy.diff(outArray, 2, 1)[startY + 1:endY - 1, startX:endX]
+
+                Dimensions of diff arrays: Rows = 4157, Columns = 2029
+
            */
-            CudaWrapper::MatrixSecondDiff_RowDevice(diffOut20, outArray, diffOut20_temp);
-            CudaWrapper::MatrixSecondDiff_ColDevice(diffOut21, outArray, diffOut21_temp);
-
-
-            cudaStatus = cudaMemcpy(diff_host, diffOut20, sizeof(float) * diffOut20_N, cudaMemcpyDeviceToHost);
-            if (cudaStatus != cudaSuccess) {
-                fprintf(stderr, "diff_arrHost cudaMemcpy failed!");
-                goto Error;
-            }
-
+            CudaWrapper::MatrixSecondDiff_RowDevice(diffOut20, oDeviceDst.data(), diffOut20_temp);
+            CudaWrapper::MatrixSecondDiff_ColDevice(diffOut21, oDeviceDst.data(), diffOut21_temp);
 
             cudaDeviceSynchronize();
 
             /*second array calculation. GPU implementation of:
 
                 second = tmpArray[startY + 1:endY - 1, startX + 1:endX - 1]*(diffOut20 + diffOut21)
+
+                Dimensions of second arrays: Rows = 4157, Columns = 2029
+
            */
             CudaWrapper::MatrixDiffProductSum_Device(second, tmpArray, diffOut20, diffOut21);
-
-            cudaStatus = cudaMemcpy(second_host, second, sizeof(float) * second_N, cudaMemcpyDeviceToHost);
-            if (cudaStatus != cudaSuccess) {
-                fprintf(stderr, "diff_arrHost cudaMemcpy failed!");
-                goto Error;
-            }
 
             cudaDeviceSynchronize();
 
@@ -712,24 +686,6 @@ int main(int argc, char *argv[])
                 tmpArray[startY:endY, startX:endX] += corr[startY:endY, startX:endX]
             */
             CudaWrapper::MatrixCopyCorr_Device(tmpArray, image, corr); 
-
-            cudaStatus = cudaMemcpy(tmpArray_host, tmpArray, sizeof(float) * N, cudaMemcpyDeviceToHost);
-            if (cudaStatus != cudaSuccess) {
-                fprintf(stderr, "diff_arrHost cudaMemcpy failed!");
-                goto Error;
-            }
-            cudaStatus = cudaMemcpy(first_host, first, sizeof(float) * first_N, cudaMemcpyDeviceToHost);
-            if (cudaStatus != cudaSuccess) {
-                fprintf(stderr, "diff_arrHost cudaMemcpy failed!");
-                goto Error;
-            }
-
-            cudaStatus = cudaMemcpy(corr_host, corr, sizeof(float) * N, cudaMemcpyDeviceToHost);
-            if (cudaStatus != cudaSuccess) {
-                fprintf(stderr, "diff_arrHost cudaMemcpy failed!");
-                goto Error;
-            }
-
 
             /*Sum of absolute difference between images calculation. Breaks loop if a certain threshold is met. 
             GPU implementation of:
@@ -756,17 +712,6 @@ int main(int argc, char *argv[])
                     goto Error;
                 }
 
-                cudaStatus = cudaMemcpy(prev_image_host, prev_image, sizeof(float) * N, cudaMemcpyDeviceToHost);
-                if (cudaStatus != cudaSuccess) {
-                    fprintf(stderr, "diff_arrHost cudaMemcpy failed!");
-                    goto Error;
-                }
-                cudaStatus = cudaMemcpy(tmpArray_host, tmpArray, sizeof(float) * N, cudaMemcpyDeviceToHost);
-                if (cudaStatus != cudaSuccess) {
-                    fprintf(stderr, "diff_arrHost cudaMemcpy failed!");
-                    goto Error;
-                }
-                
                 double diff_final = 0;
                 for (int i = 0; i < blocksPerGrid; i++) {
                     diff_final += diff_arrHost[i];
@@ -798,6 +743,7 @@ int main(int argc, char *argv[])
 
         */
         CudaWrapper::matrixIncrementSplice_Device(image, corr);
+
 
 
         std::cout << "NppiFilter error status " << eStatusNPP << std::endl; // prints 0 (no errors) //-6 is NPP_SIZE_ERROR (ROI Height or ROI width are negative)
@@ -840,6 +786,8 @@ int main(int argc, char *argv[])
         //------------------
 
         cudaDeviceSynchronize();//maybe helps for more accurate timing?
+        //END OF Brighter-fatter computation
+
         long long totalConvTime = stop_timer(convTimer, "NPP convolution time:");
 
 
@@ -896,17 +844,28 @@ int main(int argc, char *argv[])
         //for (std::set<int>::iterator it = badRows.begin(); it != badRows.end(); ++it)
         //    std::cout << ' ' << *it;
         
-        long long mse = meanSquaredImages(textConvolved, compareImg, imgSize);
-        long long avgConvolvedPixel = avgPixelValue(compareImg, inspectRows);
-        long long percentage = (sqrt(mse) / avgConvolvedPixel) *100;
+        long mse = meanSquaredImages(textConvolved, compareImg, imgSize);
+        long mse_corr = meanSquaredImages(corr_host, corrOrigin, imgSize);
+        long avgConvolvedPixel = avgPixelValue(compareImg, imgSize);
+        long avgConvolvedPixel_corr = avgPixelValue(corrOrigin, imgSize);
+        long root_mse = sqrt(mse);
+        long root_mse_corr = sqrt(mse_corr);
+        long percentage = (root_mse/ avgConvolvedPixel) *100.0;
+        long percentage_corr = (root_mse_corr / avgConvolvedPixel) * 100.0;
         float convZeroCount = zeroCount(compareImg, imgSize);
 
         std::cout << "avgConvolvedPixel: " << avgConvolvedPixel << std::endl;
+        std::cout << "avgConvolvedPixel_corr: " << avgConvolvedPixel_corr << std::endl;
+
         std::cout << "Zero count: " << convZeroCount << std::endl;
         //float mseWithOriginal = meanSquaredImages(originalImg, compareImg, imgSize);
-        std::cout << "Mean squared error: " << mse << std::endl;
-        std::cout << "Root MSE: " << sqrt(mse) << std::endl;
+        std::cout << "Mean squared error of final result: " << mse << std::endl;
+        std::cout << "Mean squared error for corr image: " << mse_corr << std::endl;
+        std::cout << "Root MSE of final result: " << root_mse << std::endl;
+        std::cout << "Root MSE of corr image: " << root_mse_corr << std::endl;
+
         std::cout << "Root MSE as a percentage of avg destination pixel: " << percentage << std::endl;
+        std::cout << "Corr Root MSE as a percentage of avg actual corr image: " << percentage << std::endl;
         //std::cout << "MSE between original input image and compareImg: " << mseWithOriginal << std::endl;
         //std::cout << "Root MSE between original input image and compareImg: " << sqrt(mseWithOriginal) << std::endl;
         

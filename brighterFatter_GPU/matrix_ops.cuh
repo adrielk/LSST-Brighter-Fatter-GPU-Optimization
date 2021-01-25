@@ -37,13 +37,10 @@ namespace CudaWrapper{
 	//final function, updating source image:
 	void matrixIncrementSplice_Device(float* imgSrc, float* corr);
 
-	//Just some crap below that doesn't really work... can look at later if have time...
 	void FreeDevice(float* dev);
 	void DeviceToHost(float* dev, float* outputs, cudaError_t cudaStatus);
 	void DeviceAllocation(float* dev, cudaError_t cudaStatus);
 	void HostToDevice(float* dev, float* input, cudaError_t cudaStatus);
 	cudaError_t GetCudaStatus();
 
-	//create wrappers for rest of teh critical functions.(diff, graidnet, abs sum (to be developed)
-	//also figure out how to make this compile with the weird complex makefile boxfilternpp r e q u i r e s...
 }
