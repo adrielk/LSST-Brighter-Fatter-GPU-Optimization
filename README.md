@@ -16,3 +16,6 @@ How to run files:
 ## Notes:
 - The main code is in the brighterFatter_GPU.cpp file
 - Helper CUDA kernels are in matrixOpsFuncs.cu and matrix_ops.cuh
+
+## Speed-up Results:-
+- [Results](https://docs.google.com/spreadsheets/d/1lHfqa3vAcOzV9VrahLMfkYolysIajMqwmt9a368h-rA/edit?usp=sharing)
