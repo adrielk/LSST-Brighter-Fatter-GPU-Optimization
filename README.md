@@ -7,7 +7,12 @@ Much of the brighter-fatter correction algorithm can be parallelized on the GPU.
 How to run files:
 
 1. Install [CUDA Toolkit and CUDA Samples](https://docs.nvidia.com/cuda/cuda-samples/index.html#getting-started-with-cuda-samples) (Must have compatible GPU)
-2. Move brighterFatter_GPU into NVIDIA_CUDA-11.0_Samples/7_CUDALibraries/
-3. cd into brighterFatter_GPU and run Makefile
-4. Add large textfiles from this [Google Doc](https://drive.google.com/drive/folders/1fT29teYEGMKKnsA0HxbufQlmHB_CMpWU?usp=sharing) to brighterFater_GPU directory
+2. Move brighterFatter_GPU directory into NVIDIA_CUDA-11.0_Samples/7_CUDALibraries/
+3. cd into brighterFatter_GPU directory and run Makefile
+4. Add large textfiles from this [Google Doc](https://drive.google.com/drive/folders/1fT29teYEGMKKnsA0HxbufQlmHB_CMpWU?usp=sharing) to brighterFatter_GPU directory
 4. Run brighterFatter_GPU executable by typing: ./brighterFatter_GPU
+
+
+## Notes:
+- The main code is in the brighterFatter_GPU.cpp file
+- Helper CUDA kernels are in matrixOpsFuncs.cu and matrix_ops.cuh
