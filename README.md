@@ -11,3 +11,8 @@ How to run files:
 3. cd into brighterFatter_GPU directory and run Makefile
 4. Add large textfiles from this [Google Doc](https://drive.google.com/drive/folders/1fT29teYEGMKKnsA0HxbufQlmHB_CMpWU?usp=sharing) to brighterFatter_GPU directory
 4. Run brighterFatter_GPU executable by typing: ./brighterFatter_GPU
+
+
+## Notes:
+- The main code is in the brighterFatter_GPU.cpp file
+- Helper CUDA kernels are in matrixOpsFuncs.cu and matrix_ops.cuh
