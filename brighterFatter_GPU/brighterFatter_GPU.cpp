@@ -214,8 +214,11 @@ double maxBrightPixelError(float* img1, float* img_true, int imgSize) {
         double err = abs(img1[i] - img_true[i]);
         double truth = img_true[i];
         double percent = err / truth;
-        
-        if (percent > max_percent && abs(img_true[i])>0.01) {
+
+        /*abs(img_true[i]>0.1) filters out very small values, 
+        which tend to produce extreme errors since even very
+        small differences can result in large error percentages*/
+        if (percent > max_percent && abs(img_true[i])>0.001) {
             max_percent = percent;
             true_val = img_true[i];
             predicted = img1[i];
@@ -299,6 +302,8 @@ int main(int argc, char *argv[])
         float* originalImg = new float[imgSize];//input image
         float* compareImg= new float[imgSize];//Resulting image for comparison to our output
         float* corrOrigin = new float[imgSize]; //resulting correlation image, which produced by the brighter-fatter algorithm and added to the orignal image
+        std::ofstream result("gpu_result_diff.txt");//loading result into text file
+        std::ofstream actual("gpu_OG_diff.txt");
 
         unsigned int srcWidth = oHostSrc.width();
         unsigned int srcHeight = oHostSrc.height();
@@ -851,6 +856,37 @@ int main(int argc, char *argv[])
             goto Error;
         }
 
+        
+        /*The following loads the resulting difference between input and output images into a textfile for visualizing*/
+        if (result.is_open())
+        {
+            for (int row = 0;row < imgDimY;row++) {
+                for (int col = 0;col < imgDimX;col++) {
+                    int index = row * imgDimX + col;
+                    result << abs(final_image[index]-originalImg[index]) << " ";
+                }
+                result <<" "<<std::endl;
+            }
+           
+            result.close();
+        }
+        else std::cout << "Unable to open file";
+        
+        if (actual.is_open())
+        {
+            for (int row = 0;row < imgDimY;row++) {
+                for (int col = 0;col < imgDimX;col++) {
+                    int index = row * imgDimX + col;
+                    actual << abs(compareImg[index]- originalImg[index]) << " ";
+                }
+                actual << " " << std::endl;
+            }
+
+            actual.close();
+        }
+        else std::cout << "Unable to open file";
+        
+      
 
         //freeing memory
         Error:
