@@ -117,6 +117,7 @@ void fillKernelArray(std::string kernelName, float*kernelArr, int kernelSize) {
     file.close();
 }
 
+//numpy.gradient CPU implementation - row axis
 void RowGradient(float* gradient_arr, float* spliced_arr, int startY, int endY, int startX, int endX, int imgWidth) {
 
     float spliced_height = endY - startY;
@@ -147,6 +148,7 @@ void RowGradient(float* gradient_arr, float* spliced_arr, int startY, int endY, 
 
 }
 
+//numpy.gradient CPU implementation - column axis
 void ColumnGradient(float* gradient_arr, float* spliced_arr, int startY, int endY, int startX, int endX, int imgWidth) {
     float spliced_height = endY - startY;
     float spliced_width = endX - startX;
@@ -177,6 +179,7 @@ void ColumnGradient(float* gradient_arr, float* spliced_arr, int startY, int end
 
 }
 
+//Array splicer. Behaves like Python array slicing for matrices
 float* SpliceArray(float* arr, int startY, int endY, int startX, int endX, int imgWidth) {
     int spliced_height = endY - startY;
     int spliced_width = endX - startX;
@@ -198,6 +201,12 @@ float* SpliceArray(float* arr, int startY, int endY, int startX, int endX, int i
     return spliced_arr;
 }
 
+/*
+CPU Implementation of:
+    gradTmp = numpy.gradient(tmpArray[startY:endY, startX:endX])
+    gradOut = numpy.gradient(outArray[startY:endY, startX:endX])
+
+*/
 void GetGradient(float* grad_row, float* grad_col, float* arr, int startY, int endY, int startX, int endX, int imgWidth) {
 
     int spliced_size = (endX - startX) * (endY - startY);
@@ -209,8 +218,7 @@ void GetGradient(float* grad_row, float* grad_col, float* arr, int startY, int e
 }
 
 
-//start? vars are for splicing only
-
+/*Gets second diff of matrix along row axis*/
 void Get_SecondDiff_Row(float* diffOut,float* arr,int imgWidth, int imgHeight, int startY, int endY_val, int startX, int endX_val) {
     int diff_index = 0;
     int diff_height = imgHeight - 1;
@@ -252,6 +260,7 @@ void Get_SecondDiff_Row(float* diffOut,float* arr,int imgWidth, int imgHeight, i
     
 }
 
+/*Gets second diff of matrix along column axis*/
 void Get_SecondDiff_Column(float* diffOut, float* arr, int imgWidth, int imgHeight, int startY, int endY_val, int startX, int endX_val) {
     int diff_width = imgWidth - 1;
     float* temp = new float[diff_width * imgHeight];
@@ -290,6 +299,11 @@ void Get_SecondDiff_Column(float* diffOut, float* arr, int imgWidth, int imgHeig
 
 }
 
+/* CPU implementation of:
+
+    diffOut20 = numpy.diff(outArray, 2, 0)[startY:endY, startX + 1:endX - 1]
+    diffOut21 = numpy.diff(outArray, 2, 1)[startY + 1:endY - 1, startX:endX]
+*/
 void Get_SecondDiff(float* diffOut, float* arr ,int startY, int endY, int startX, int endX, int imgWidth, int imgHeight, int axis) {
     
     if (axis == 0) {//row-wise 
@@ -300,6 +314,10 @@ void Get_SecondDiff(float* diffOut, float* arr ,int startY, int endY, int startX
     }
 }
 
+/*
+CPU equivalent of:
+    diff = numpy.sum(numpy.abs(prev_image - tmpArray))
+*/
 double MatrixAbsDiffSum(float* arr1, float* arr2, int arrSize) {
     double absDiff = 0;
     
@@ -538,10 +556,18 @@ int main(int argc, char** argv)
             }
         }
 
-
+        /*
+        Equivalent to:
+                gradTmp = numpy.gradient(tmpArray[startY:endY, startX:endX])
+                gradOut = numpy.gradient(outArray[startY:endY, startX:endX])
+        */
         GetGradient(gradTmp_row, gradTmp_col, tmpArray, startY, endY_value, startX, endX_value, imgDimX);
         GetGradient(gradOut_row, gradOut_col, outArray, startY, endY_value, startX, endX_value, imgDimX);
-        //first calcualtion code:
+        
+        /*
+         Equivalent to:
+            first = (gradTmp[0]*gradOut[0] + gradTmp[1]*gradOut[1])[1:-1, 1:-1]
+         */
         int first_index = 0;
         for (int row = 1;row < grad_R - 1;row++) {
             for (int col = 1;col < grad_C - 1;col++) {
@@ -551,12 +577,19 @@ int main(int argc, char** argv)
             }
         }
 
-        
+        /*
+          Equivalent to:
+              diffOut20 = numpy.diff(outArray, 2, 0)[startY:endY, startX + 1:endX - 1]
+              diffOut21 = numpy.diff(outArray, 2, 1)[startY + 1:endY - 1, startX:endX]
+          */
         Get_SecondDiff(diffOut20, outArray, startY, endY_value,startX, endX_value, imgDimX, imgDimY, 0);
         Get_SecondDiff(diffOut21, outArray, startY, endY_value,startX, endX_value, imgDimX, imgDimY, 1);
         
 
-        //second calculation code:
+        /*
+            Equivalent to:        
+                second = tmpArray[startY + 1:endY - 1, startX + 1:endX - 1]*(diffOut20 + diffOut21)
+        */
         int second_index = 0;
         for (int row = (startY + 1);row < (endY_value - 1);row++) {
             for (int col = (startX + 1);col < (endX_value - 1);col++) {
@@ -567,7 +600,10 @@ int main(int argc, char** argv)
         }
 
         
-        //corr code:
+        /*
+            Equivalent to:
+                corr[startY + 1:endY - 1, startX + 1:endX - 1] = 0.5*(first + second)
+        */
         int diffs_index = 0;
         for (int row = startY + 1; row < endY_value - 1;row++) {
             for (int col = startX + 1;col < endX_value - 1;col++) {
@@ -577,7 +613,12 @@ int main(int argc, char** argv)
             }
         }
 
-        //tmpArray code:
+        /*
+        Equivalent to:
+            tmpArray[:, :] = image.getArray()[:, :]
+            tmpArray[nanIndex] = 0.
+            tmpArray[startY:endY, startX:endX] += corr[startY:endY, startX:endX]
+         */
         for (int k = 0;k < imgSize;k++) {
             if (isnan(tmpArray[k]) == false)
                 tmpArray[k] = image[k];
@@ -590,6 +631,17 @@ int main(int argc, char** argv)
                 tmpArray[linear_index] += corr[linear_index];
             }
         }
+
+        /*
+        Equivalent to:
+
+             if iteration > 0:
+                diff = numpy.sum(numpy.abs(prev_image - tmpArray))
+
+                if diff < threshold:
+                    break
+                prev_image[:, :] = tmpArray[:, :]
+        */
 
         if (i > 0) {
 
@@ -623,6 +675,11 @@ int main(int argc, char** argv)
   
     int testing = 0;
 
+
+    /*
+    Equivalent to:
+          image.getArray()[startY + 1:endY - 1, startX + 1:endX - 1] += corr[startY + 1:endY - 1, startX + 1:endX - 1]
+    */
     cout << "Final Step" << endl;
     for (int row = startY+1;row < endY_value - 1;row++) {
         for (int col = startX + 1;col < endX_value - 1;col++) {
@@ -650,15 +707,6 @@ int main(int argc, char** argv)
 
     long long timerEnd = stop_timer(timer, "Total Filter time:");
 
-    //int resIndex= 0;
-    //for (int i = 0;i < dst.rows;i++) {
-    //    for (int j = 0;j < dst.cols;j++) {
-    //        float pixel = dst.at<float>(i, j);
-    //        //cout << "Dest. mat val " << i << "," << j << ": " << pixel << endl;
-    //        dstImg[resIndex] = pixel;
-    //        resIndex++;
-    //    }
-    //}
 
     double mse_image = meanSquaredImages(image, compareImg, imgSize);
     double mse_corr = meanSquaredImages(corr, corrOrigin, imgSize);
@@ -669,17 +717,6 @@ int main(int argc, char** argv)
     std::cout << "Mean squared error of correction matrix: " << mse_corr << std::endl;
     std::cout << "Max error percentage of final result: " << maxError_img << std::endl;
     std::cout << "Max error percentage of correction matrix: " << maxError_corr << std::endl;
-
-    //long long mse = meanSquaredImages(dstImg, compareImg, inspectRows);
-    //long long avgConvolvedPixel = avgPixelValue(compareImg, inspectRows);
-    //long long percentage = sqrt(mse) / avgConvolvedPixel * 100;
-    //double pixelErrorCountPercent = pixelErrorThresholdPercent(compareImg, dstImg, inspectRows, imgDimX, badRows, badCols);
-    //
-    //std::cout << "Pixel Error Count Percent (% of extremely erroneous values >=2% error): " << pixelErrorCountPercent << std::endl;
-    //std::cout << "avgConvolvedPixel: " << avgConvolvedPixel << std::endl;
-    //std::cout << "Mean squared error: " << mse << std::endl;
-    //std::cout << "Root MSE: " << sqrt(mse) << std::endl;
-    //std::cout << "Root MSE as a percentage of avg destination pixel: " << percentage << std::endl;
 
     return EXIT_SUCCESS;
 }
