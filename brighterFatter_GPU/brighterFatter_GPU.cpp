@@ -148,19 +148,85 @@ double meanSquaredImages(float* img1, float* img2, int imgSize) {
     return mse;
 }
 
+/*Gets maximum error percent*/
+//double maxError(float* img1, float* img_true, int imgSize) {
+//    double maxError = abs(img1[0]-img_true[0]);
+//    double true_val = img_true[0];
+//    double max_p = 0;
+//    for (int i = 1;i < imgSize;i++) {
+//        double err = abs(img1[i] - img_true[i]);
+//        double p_val = err / img_true[i];
+//        if (p_val > max_p && img_true[i] !=0){
+//            max_p = p_val;
+//            maxError = err;
+//            true_val = img_true[i];
+//        }
+//    }
+//    return max_p;
+//}
 double maxError(float* img1, float* img_true, int imgSize) {
-    double maxError = abs(img1[0]-img_true[0]);
+    double maxError = abs(img1[0] - img_true[0]);
     double true_val = img_true[0];
+    double predicted = img1[0];
+    double max_percent = 0;
     for (int i = 1;i < imgSize;i++) {
         double err = abs(img1[i] - img_true[i]);
-        if (err > maxError) {
+        double truth = img_true[i];
+        double percent = err / truth;
+        /*if (err > maxError) {
             maxError = err;
             true_val = img_true[i];
+        }*/
+        if (percent > max_percent) {
+            max_percent = percent;
+            true_val = img_true[i];
+            predicted = img1[i];
         }
     }
-    double p_error = maxError / true_val;
-    return p_error;
+
+    //std::cout << "True value: " << true_val << std::endl;
+    //std::cout << "Predicted value: " << predicted << std::endl;
+    //double p_error = maxError / true_val;
+    return max_percent;//p_error;
 }
+
+void printMaxAndMin(float* img, int imgSize) {
+    double min = img[0];
+    double max = img[0];
+    for (int i = 0;i < imgSize;i++) {
+        if (img[i] < min) {
+            min = img[i];
+        }
+        if (img[i] > max) {
+            max = img[i];
+        }
+    }
+    std::cout << "MAX: " << max << "/ MIN: " << min << std::endl;
+}
+
+//Error surrounding bright areas, where it's most relevant
+double maxBrightPixelError(float* img1, float* img_true, int imgSize) {
+    double maxError = abs(img1[0] - img_true[0]);
+    double true_val = img_true[0];
+    double predicted = img1[0];
+    double max_percent = 0;
+    for (int i = 1;i < imgSize;i++) {
+        double err = abs(img1[i] - img_true[i]);
+        double truth = img_true[i];
+        double percent = err / truth;
+        
+        if (percent > max_percent && abs(img_true[i])>0.01) {
+            max_percent = percent;
+            true_val = img_true[i];
+            predicted = img1[i];
+        }
+    }
+    printMaxAndMin(img_true, imgSize);
+  
+    return max_percent;//p_error;
+}
+
+
 
 /*Gets average value of a pixel in a given image/array*/
 long avgPixelValue(float* img, int imgSize) {
@@ -251,8 +317,8 @@ int main(int argc, char *argv[])
         std::string word, t, q, filename, compareFilename, corrFilename;
         
         // filename of the file
-        filename = "inputImgOG2.txt";//input image textfile
-        compareFilename = "finalImgOG2.txt";//output image for comparison
+        filename = "inputImgOG.txt";//input image textfile
+        compareFilename = "finalImgOG.txt";//output image for comparison
         corrFilename = "corr.txt"; //output correlation image for comparison
 
         file.open(filename.c_str());
@@ -591,7 +657,7 @@ int main(int argc, char *argv[])
 
 	    for(int i = 0 ;i<maxIter;i++){
 
-	        //std::cout<<"Iteration: "<<i<<std::endl;
+	        std::cout<<"Iteration: "<<i<<std::endl;
 
             /*Single Channel Filter for 32 bit image and 32 bit kernel 
             (precision loss possible, since kernel from LSST code is originally 64 bit)
@@ -840,7 +906,7 @@ int main(int argc, char *argv[])
         double mse_image = meanSquaredImages(final_image, compareImg, imgSize);
         double mse_corr = meanSquaredImages(corr_host, corrOrigin, imgSize);
         double maxError_img = maxError(final_image, compareImg, imgSize);
-        double maxError_corr = maxError(corr_host, corrOrigin, imgSize);
+        double maxError_corr = maxBrightPixelError(corr_host, corrOrigin, imgSize);
 
         std::cout << "Mean squared error of final result: " << mse_image << std::endl;
         std::cout << "Mean squared error of correction matrix: " << mse_corr << std::endl;

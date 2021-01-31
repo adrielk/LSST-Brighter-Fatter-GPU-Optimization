@@ -59,16 +59,69 @@ double meanSquaredImages(float* img1, float* img2, int imgSize) {
 double maxError(float* img1, float* img_true, int imgSize) {
     double maxError = abs(img1[0] - img_true[0]);
     double true_val = img_true[0];
+    double predicted = img1[0];
+    double max_percent = 0;
     for (int i = 1;i < imgSize;i++) {
         double err = abs(img1[i] - img_true[i]);
-        if (err > maxError) {
+        double truth = img_true[i];
+        double percent = err / truth;
+        /*if (err > maxError) {
             maxError = err;
             true_val = img_true[i];
+        }*/
+        if (percent > max_percent) {
+            max_percent = percent;
+            true_val = img_true[i];
+            predicted = img1[i];
         }
     }
-    double p_error = maxError / true_val;
-    return p_error;
+
+    //std::cout << "True value: " << true_val << std::endl;
+    //std::cout << "Predicted value: " << predicted << std::endl;
+    //double p_error = maxError / true_val;
+    return max_percent;//p_error;
 }
+
+
+void printMaxAndMin(float* img, int imgSize) {
+    double min = img[0];
+    double max = img[0];
+    for (int i = 0;i < imgSize;i++) {
+        if (img[i] < min) {
+            min = img[i];
+        }
+        if (img[i] > max) {
+            max = img[i];
+        }
+    }
+    std::cout << "MAX: " << max << "/ MIN: " << min << std::endl;
+}
+
+//Error surrounding bright areas, where it's most relevant
+double maxBrightPixelError(float* img1, float* img_true, int imgSize) {
+    double maxError = abs(img1[0] - img_true[0]);
+    double true_val = img_true[0];
+    double predicted = img1[0];
+    double max_percent = 0;
+    for (int i = 1;i < imgSize;i++) {
+        double err = abs(img1[i] - img_true[i]);
+        double truth = img_true[i];
+        double percent = err / truth;
+
+        /*abs(img_true[i]>0.1) filters out very small values,
+        which tend to produce extreme errors since even very
+        small differences can result in large error percentages*/
+        if (percent > max_percent&& abs(img_true[i]) > 0.01) {
+            max_percent = percent;
+            true_val = img_true[i];
+            predicted = img1[i];
+        }
+    }
+    printMaxAndMin(img_true, imgSize);
+
+    return max_percent;//p_error;
+}
+
 
 long long avgPixelValue(float* img, int imgSize) {
     long long sum = 0;
@@ -350,6 +403,7 @@ int main(int argc, char** argv)
 
     // filename of the file
     filename = "inputImgOG.txt";
+    compareFilename = "finalImgOG.txt";
     corrFilename = "corr.txt";
 
     // opening file
@@ -391,8 +445,6 @@ int main(int argc, char** argv)
 
     long long loadend_timer = stop_timer(loading_timer,"Time to load image data from text file: ");
 
-
-    compareFilename = "finalImgOG.txt";
 
     file.open(compareFilename.c_str());
     if (file.is_open()) {
@@ -711,7 +763,7 @@ int main(int argc, char** argv)
     double mse_image = meanSquaredImages(image, compareImg, imgSize);
     double mse_corr = meanSquaredImages(corr, corrOrigin, imgSize);
     double maxError_img = maxError(image, compareImg, imgSize);
-    double maxError_corr = maxError(corr, corrOrigin, imgSize);
+    double maxError_corr = maxBrightPixelError(corr, corrOrigin, imgSize);
 
     std::cout << "Mean squared error of final result: " << mse_image << std::endl;
     std::cout << "Mean squared error of correction matrix: " << mse_corr << std::endl;
