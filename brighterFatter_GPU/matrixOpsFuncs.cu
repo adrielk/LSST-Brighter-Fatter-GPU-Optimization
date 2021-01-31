@@ -140,26 +140,51 @@ __global__ void matrixDiffKernel_2D_Horiz(float* c, const float* a) {
 }
 
 
+__global__ void matrixDiffSplice_2D_Horiz(float* c, const float* a) {
+    int tid = threadIdx.x + blockIdx.x * blockDim.x; //current index
+    //note: this splices the second diff, so the matrix is 4174 x 2048. We want to splice down to 4157 x 2029
+
+    while (tid < N_axis0_2 - C) {
+
+        int tid_row = tid / C;
+        int tid_col = tid % C;
+
+        //splice condition, based on resulting "coordinate space". (-2 is to correct for matrix shrinkage after two diffs)
+        if (tid_row >= startY && tid_row < (endY-2) && tid_col>=(startX+1) && tid_col<(endX-1)) {
+            int spliced_row = tid_row - (startY);
+            int spliced_col = tid_col - (startX + 1);
+            int spliced_index = spliced_row * (diff_C_0)+spliced_col;
+            c[spliced_index] = a[tid];
+        }
+
+        tid += blockDim.x * gridDim.x;
+
+    }
+
+
+}
+
 /*Horizontal axis (axis = 0) 2nd diff. Implementation of numpy.diff*/
 __global__ void matrixDiffKernel_2D_Horiz_Iter2(float* c, const float* a) {
     int tid = threadIdx.x + blockIdx.x * blockDim.x; //current index
     
-    while (tid < N_axis0_2 - C) {
+    while (tid < N_axis0_2 - C) {//test this with and without this...
     
         int tid_row_diff = tid / C;
         int tid_col_diff = tid % C;
         int tid_next = tid + C;
 
-        //splice condition, based on resulting "coordinate space".
-        if (tid_row_diff >= startY && tid_row_diff < endY && tid_col_diff >= (startX + 1) && tid_col_diff < (endX - 1)) {
+        //splice condition, based on resulting "coordinate space". (-2 is to correct for matrix shrinkage after two diffs)
+        //if (tid_row_diff >= startY && tid_row_diff < endY-2 && tid_col_diff >= (startX + 1) && tid_col_diff < (endX - 1)) {
             
             //corrected coordinates relative to spliced array
-            int tid_row_diffSplice = tid_row_diff - startY;
-            int tid_col_diffSplice = tid_col_diff - (startX + 1);
-            int tid_linear = (tid_row_diffSplice * C) + tid_col_diffSplice;
-
-            c[tid_linear] = (a[tid_next] - a[tid]);
-        }
+            //int tid_row_diffSplice = tid_row_diff - startY;
+            //int tid_col_diffSplice = tid_col_diff - (startX + 1);
+            //int tid_linear = (tid_row_diffSplice * (diff_C_0)) + tid_col_diffSplice;
+        
+            c[tid] = (a[tid_next] - a[tid]);
+        
+        //}
 
 
         tid += blockDim.x * gridDim.x;
@@ -178,8 +203,8 @@ __global__ void matrixDiffKernel_2D_Vert(float* c, const float* a) {
         int tid_row = tid / C;
         int tid_col = tid % C;
         int tid_row_next = (tid + 1) / C;
-        int tid_col_next = (tid + 1) % C;
-        if (tid_col < (C-1) && tid_row == tid_row_next) {//elements are along the same row
+        //int tid_col_next = (tid + 1) % C;
+        if (tid_row == tid_row_next) {//elements are along the same row
             c[tid - tid_row] = a[tid + 1] - a[tid];
         }
 
@@ -188,37 +213,82 @@ __global__ void matrixDiffKernel_2D_Vert(float* c, const float* a) {
 
 }
 
-/*Vertical axis (axis = 1) 2nd diff. Implementation of numpy.diff*/
+
+__global__ void matrixDiffSplice_2D_Vert(float* c, const float* a) {
+    int tid = threadIdx.x + blockIdx.x * blockDim.x; //current index
+    //note: this splices the second diff, so the matrix is 4176 x 2046. We want to splice down to 4157 x 2029
+    int cols = C - 2;
+
+    while (tid < N) {
+
+        int tid_row = tid / cols;
+        int tid_col = tid % cols;
+
+        if (tid_row >= (startY + 1) && tid_row < (endY - 1) && tid_col >= startX && tid_col < endX-2) {
+            int spliced_row = tid_row - (startY+1);
+            int spliced_col = tid_col - (startX);
+            int spliced_index = spliced_row * (diff_C_0)+spliced_col;
+            c[spliced_index] = a[tid];
+        }
+        tid += blockDim.x * gridDim.x;
+    }
+
+
+}
+
+/*Vertical axis (axis = 1) 2nd diff. Implementation of numpy.diff*/ //DUH, just reuse the first iteration
 __global__ void matrixDiffKernel_2D_Vert_Iter2(float* c, const float* a) {
     int tid = threadIdx.x + blockIdx.x * blockDim.x; //current index
-    int cols = C - 1;
+    int cols = C - 1;//loses a column for second iteration
 
-    while (tid < N_axis1_2) {
+    while (tid < N) {
+
         int tid_row = tid / cols;
         int tid_col = tid % cols;
         int tid_row_next = (tid + 1) / cols;
-        int tid_col_next = (tid + 1) % cols;
-
-        if (tid_col < (cols - 1) && tid_row == tid_row_next) {//elements are along the same row
-            
-            int tid_row_diff = (tid - tid_row) / (cols - 1);
-            int tid_col_diff = (tid - tid_row) % (cols - 1);
-
-            if (tid_row_diff >= (startY + 1) && tid_row_diff < (endY - 1) && tid_col_diff >= startX && tid_col_diff < endX-2) {//endX-2 (-2 is to account for shrinkage)
-                int tid_row_diffSpliced = tid_row_diff - (startY + 1);
-                int tid_col_diffSpliced = tid_col_diff - (startX);
-                int tid_linear = (tid_row_diffSpliced * (cols-1)) + tid_col_diffSpliced; 
-
-                c[tid_linear] = a[tid + 1] - a[tid];
-            }
-        
-        
+        //int tid_col_next = (tid + 1) % C;
+        if (tid_row == tid_row_next) {//elements are along the same row
+            c[tid - tid_row] = a[tid + 1] - a[tid];
         }
 
         tid += blockDim.x * gridDim.x;
     }
 
 }
+//__global__ void matrixDiffKernel_2D_Vert_Iter2(float* c, const float* a) {
+//    int tid = threadIdx.x + blockIdx.x * blockDim.x; //current index
+//    int cols = C - 1;
+//
+//    while (tid < N){//N_axis1_2 - R) { Beware, this bound is sketchy, since rows cannot simply be cut off since they are ingrained in a 1D array...
+//        int tid_row = tid / cols;
+//        int tid_col = tid % cols;
+//        int tid_row_next = (tid + 1) / cols;
+//        //int tid_col_next = (tid + 1) % cols;
+//        //establish splice boundary. Must also bound tid_row_next and check if it's on the same row as current index
+//        //if (tid_row >= (startY + 1) && tid_row < (endY - 1) && tid_col >= startX && tid_col < endX - 2 && tid_row_next <(endY-1) && tid_row_next == tid_row) {
+//
+//            
+//            if (tid_row_next == tid_row) {//must be on same row for this
+//                //int tid_row_diffSpliced = tid_row - (startY + 1);
+//                //int tid_col_diffSpliced = tid_col - (startX);
+//                //int tid_linear = (tid_row_diffSpliced * (diff_C_0)) + tid_col_diffSpliced;
+//
+//                //c[tid_linear - tid_row_diffSpliced] = a[tid + 1] - a[tid];
+//
+//                c[tid - tid_row] = a[tid + 1] - a[tid];
+//
+//                //debug by setting to index to tid (see outArray's indices)
+//                //then try what skadron suggested
+//            }
+//
+//
+//        
+//        //}
+//        
+//        tid += blockDim.x * gridDim.x;
+//    }
+//
+//}
 
 /*GPU implementation of:
     diff = numpy.sum(numpy.abs(prev_image - tmpArray))
@@ -314,7 +384,7 @@ __global__ void matrixGradientKernel_2D_Row(float* c, const float* a) {
     int tid_row = tid / grad_C;
     int tid_col = tid % grad_C;
     
-    if (tid_row == 0) {//if first row (gradient is simply the difference)
+    if (tid_row == 0) {//if first row the gradient is simply the difference between the following row and first row
         c[tid] = a[tid + grad_C] - a[tid];
     }
     else if (tid_col == grad_C-1) {//tid is a last row index
@@ -545,17 +615,27 @@ namespace CudaWrapper {
         matrixDiffProductSum << <blocksPerGrid, threadsPerBlock >> > (dev_c, tmpArray, diffOut20, diffOut21);
     }
 
-    void MatrixSecondDiff_RowDevice(float* dev_c, float* dev_a, float* temp) {
+    //temp is missing one row, temp2 is missing 2 rows.
+    void MatrixSecondDiff_RowDevice(float* dev_c, float* dev_a, float* temp, float* temp2) {
         //dev_c stores 2nd spliced diff, dev_temp stores first derivative, dev_a is the original input image
         matrixDiffKernel_2D_Horiz << <blocksPerGrid, threadsPerBlock >> > (temp, dev_a);
         cudaDeviceSynchronize();
-        matrixDiffKernel_2D_Horiz_Iter2 << <blocksPerGrid, threadsPerBlock >> > (dev_c, temp);
+        //matrixDiffKernel_2D_Horiz_Iter2 << <blocksPerGrid, threadsPerBlock >> > (dev_c, temp);
+        matrixDiffKernel_2D_Horiz << <blocksPerGrid, threadsPerBlock >> > (temp2, temp);//be aware of bounds... not sure if it'd be an actual problem tho.
+        cudaDeviceSynchronize();
+        matrixDiffSplice_2D_Horiz << <blocksPerGrid, threadsPerBlock >> > (dev_c, temp2);//just splices temp2 down to 4157 x 2029
     }
-
-    void MatrixSecondDiff_ColDevice(float* dev_c, float* dev_a, float* temp) {
+    
+    //temp is missing one column, temp2 is missing 2 columns
+    void MatrixSecondDiff_ColDevice(float* dev_c, float* dev_a, float* temp, float* temp2) {
         matrixDiffKernel_2D_Vert << <blocksPerGrid, threadsPerBlock >> > (temp, dev_a);
         cudaDeviceSynchronize();
-        matrixDiffKernel_2D_Vert_Iter2 << <blocksPerGrid, threadsPerBlock >> > (dev_c, temp);
+        //matrixDiffKernel_2D_Vert_Iter2 << <blocksPerGrid, threadsPerBlock >> > (dev_c, temp);
+        //matrixDiffKernel_2D_Vert << <blocksPerGrid, threadsPerBlock >> > (temp2, temp);
+        matrixDiffKernel_2D_Vert_Iter2 << <blocksPerGrid, threadsPerBlock >> > (temp2, temp);
+        cudaDeviceSynchronize();
+        matrixDiffSplice_2D_Vert << <blocksPerGrid, threadsPerBlock >> > (dev_c, temp2);//just splices temp2 down to 4157 x 2029
+
     }
 
     void MatrixGradientProductSum_Device(float* dev_c, float* gradTmp_dev_0, float* gradTmp_dev_1, float* gradOut_dev_0, float* gradOut_dev_1) {

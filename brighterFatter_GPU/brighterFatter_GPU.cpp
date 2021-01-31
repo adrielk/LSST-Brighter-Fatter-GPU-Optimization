@@ -10,6 +10,7 @@
  */
 
 //Author: Adriel Kim
+//1-31-2021
 
 #if defined(WIN32) || defined(_WIN32) || defined(WIN64) || defined(_WIN64)
 #  define WINDOWS_LEAN_AND_MEAN
@@ -53,7 +54,7 @@ void fillKernelArray(std::string kernelName, Npp32f* kernelArr, int kernelSize);
 /*Image size constants */
 const int R = 4176;
 const int C = 2048; 
-const int N = R * C;
+const int N = (R * C);
 
 inline int cudaDeviceInit(int argc, const char **argv)
 {
@@ -135,16 +136,30 @@ void fillKernelArray(std::string kernelName, Npp32f* kernelArr, int kernelSize) 
 
 
 /*Gets mean squared error between two images*/
-long long meanSquaredImages(float* img1, float* img2, int imgSize) {
-    long long diff = 0;
+double meanSquaredImages(float* img1, float* img2, int imgSize) {
+    double diff = 0;
     for (int i = 0;i < imgSize;i++) {
-        long long pix1 = img1[i];
-        long long pix2 = img2[i];
-        long long pixDiff = pix1 - pix2;
-        diff += pixDiff*pixDiff;
+        double pix1 = img1[i];
+        double pix2 = img2[i];
+        double pixDiff = pix1 - pix2;
+        diff += (pixDiff*pixDiff);
     }
-    long long mse = diff / imgSize;
+    double mse = diff / ((double)imgSize);
     return mse;
+}
+
+double maxError(float* img1, float* img_true, int imgSize) {
+    double maxError = abs(img1[0]-img_true[0]);
+    double true_val = img_true[0];
+    for (int i = 1;i < imgSize;i++) {
+        double err = abs(img1[i] - img_true[i]);
+        if (err > maxError) {
+            maxError = err;
+            true_val = img_true[i];
+        }
+    }
+    double p_error = maxError / true_val;
+    return p_error;
 }
 
 /*Gets average value of a pixel in a given image/array*/
@@ -212,17 +227,11 @@ int main(int argc, char *argv[])
         int imgDimY = 4176;
         int imgSize =  imgDimX * imgDimY;
 
-        //Code from stack overflow - begin
-        std::string fileExtension = ".pgm";
-        std::string dirFilename = "fitstest";
-        std::string saveFilename = dirFilename + "_8bitBFconvolved";
-
         npp::ImageCPU_32f_C1 oHostSrc(imgDimX,imgDimY);//32-bit image
 
 
         float* originalImg = new float[imgSize];//input image
         float* compareImg= new float[imgSize];//Resulting image for comparison to our output
-        float* textConvolved= new float[imgSize]; //Resulting image from GPU implementation
         float* corrOrigin = new float[imgSize]; //resulting correlation image, which produced by the brighter-fatter algorithm and added to the orignal image
 
         unsigned int srcWidth = oHostSrc.width();
@@ -230,7 +239,14 @@ int main(int argc, char *argv[])
 
 
 
-        /*Filling the arrays above with values from text files*/
+        /*Filling the arrays above with values from text files:
+
+          Ideally, I would have binded this code to Python and pass in the image arrays directly.
+          However, to simplify things I simply saved images as text files and load them into arrays manually
+          This takes time but it should be not counted as part of the actual brighter-fatter correction time
+          since I'm assuming that images are already loaded.
+
+        */
         std::fstream file;
         std::string word, t, q, filename, compareFilename, corrFilename;
         
@@ -291,14 +307,11 @@ int main(int argc, char *argv[])
 
         file.close();
 
-        //Testing print of original image
-        /*std::cout << "Inner INPUTS of original SRC image: " << std::endl;
-        for (int row = 50;row < 52;row++) {
-            for (int col = 50;col < 55;col++) {
-                int index = row * C + col;
-                std::cout << "row: " << row << "; col: " << col << "; value: " << oHostSrc.data()[index] << std::endl;
-            }
-        }*/
+
+        
+
+
+        //--Brighter-Fatter Correction Begins-------------------------------------------------------------------------        
 
         long long convTimer = start_timer();
 
@@ -306,11 +319,10 @@ int main(int argc, char *argv[])
 
         NppiSize kernelSize = { 17,17 };
 
-        //does this not convolve the edges?(Double check this)
-        NppiSize oSizeROI = { imgDimX, imgDimY };//{ imgDimX - kernelSize.width+1, imgDimY - kernelSize.height+1 };//{imgDimX, imgDimY};
+        NppiSize oSizeROI = { imgDimX, imgDimY };
         NppiSize oSrcSize = { imgDimX, imgDimY };
-        NppiPoint oSrcOffset = {0,0};//not exactly sure what this does...
-        NppiBorderType eBorderType = NPP_BORDER_REPLICATE;
+        //NppiPoint oSrcOffset = {0,0};
+        //NppiBorderType eBorderType = NPP_BORDER_REPLICATE;
 
         npp::ImageNPP_32f_C1 oDeviceDst(oSizeROI.width, oSizeROI.height);//Device memory for convolved (output) image
         npp::ImageCPU_32f_C1 oHostDst(oDeviceDst.size());//Host memory destination for resulting image
@@ -319,7 +331,6 @@ int main(int argc, char *argv[])
 
         std::cout << "kernelSize.width: " << kernelSize.width / 2 << "/kernelSize.height: " << kernelSize.height / 2 << std::endl;
         int hostKSize = kernelSize.width * kernelSize.height;
-        //Npp32f hostKernel[hostKSize];//= { 0, -1, 0, -1, 5, -1, 0, -1, 0 };//{ 0,0,0,0,1,0,0,0,0 };//Identity kernel to test alignment//{ 0, -1, 0, -1, 5, -1, 0, -1, 0 };//this is emboss//{ -1, 0, 1, -1, 0, 1, -1, 0, 1 }; // convolving with this should do edge detection
         Npp32f hostKernel[hostKSize];
         std::cout << "Host kernel size: " << hostKSize << std::endl;
         fillKernelArray("bfKernel.txt", hostKernel, hostKSize);
@@ -334,17 +345,17 @@ int main(int argc, char *argv[])
         cudaMalloc((void**)&deviceKernel, kernelSize.width * kernelSize.height * sizeof(Npp32f));
         cudaMemcpy(deviceKernel, hostKernel, kernelSize.width * kernelSize.height * sizeof(Npp32f), cudaMemcpyHostToDevice);
         Npp32f divisor = 1; // no scaling
-
+        
         std::cout << "Calculated size: " << kernelSize.width * kernelSize.height * sizeof(Npp32f) << std::endl;
         std::cout << "Device kernel size: " << sizeof(deviceKernel) << std::endl;
         std::cout << "hostKernel size: " << sizeof(hostKernel) << std::endl;
 
-        int devPitch = oDeviceSrc.pitch();
-        int dstPitch = oDeviceDst.pitch();
+        //How pitch is calculated: (size of pixel) * (image width)
+        int devPitch = sizeof(float) * imgDimX;//number of bytes per row
+        int dstPitch = sizeof(float) * imgDimX;//number of bytes per row
 
         std::cout << "devPitch:" << devPitch << "   dstPitch:" << dstPitch << std::endl;
   
-        //How pitch is calculated: how many bytes in a row? Calcualte by getting bytes in a pixel * image width
         
         std::cout << "Source image Line Step (bytes) " << devPitch << std::endl;
         std::cout << "Destination Image line step (bytes): " << dstPitch << std::endl;
@@ -367,7 +378,7 @@ int main(int argc, char *argv[])
         const int threadsPerBlock = 1024;
         const int blocksPerGrid = 8352;
 
-       
+        //dimension constants
         int grad_R = (R - startY + endY);//#of rows of resulting gradient image
         int grad_C = (C - startX + endX);//# cols
         int grad_N = grad_R * grad_C; 
@@ -383,10 +394,11 @@ int main(int argc, char *argv[])
         int diffOut21_N = diff_R_1 * diff_C_1;
         int diffOut20_N_full = N - C;
         int diffOut21_N_full = N - R;
-
+        int diffOut20_N_full2 = N - (2 * C);
+        int diffOut21_N_full2 = N - (2 * R);
         int second_N = diff_R_1 * diff_C_0;
 
-
+        //--------------------------------------------------------------------//
         //**DEVICE VARIABLES**//       
         float* gradTmp_dev_0 = 0;
         float* gradTmp_dev_1 = 0;
@@ -397,7 +409,9 @@ int main(int argc, char *argv[])
         float* diffOut20 = 0;
         float* diffOut21 = 0;
         float* diffOut20_temp = 0;
+        float* diffOut20_temp2 = 0;
         float* diffOut21_temp = 0;
+        float* diffOut21_temp2 = 0;
         float* second = 0;
     
         float* corr = 0;
@@ -408,14 +422,14 @@ int main(int argc, char *argv[])
 
         float* outArray = 0;
         float* outArray_spliced = 0;
-        float* prev_image = 0; //previous tmpArray (float check initilized to zero?
+        float* prev_image = 0; 
 
         float* diff_arr = 0;
         float* diff_arrHost = (float*)malloc(blocksPerGrid * sizeof(float));//host memory to finish computation of diff and comparison with threshold
         int threshold = 1000;//this value was retrieved from available test files. (Of course, this may not be constant)
 
         //image
-        float* image = 0;//(float*)malloc(N * sizeof(float));
+        float* image = 0;
         //Final vars
         float* final_image = (float*)malloc(N * sizeof(float));//host memory to finish computation of diff and comparison with threshold
         
@@ -431,7 +445,7 @@ int main(int argc, char *argv[])
         }
 
         //original image allocation
-        cudaStatus = cudaMalloc((void**)&image, N * sizeof(float));//tmpArray has the original device input copied over to it, but this is iteratively modified for the BF procedure
+        cudaStatus = cudaMalloc((void**)&image, N * sizeof(float));
         if (cudaStatus != cudaSuccess) {
             fprintf(stderr, "cudaMalloc failed! 11");
             goto Error;
@@ -482,8 +496,6 @@ int main(int argc, char *argv[])
         //^^^ end of gradient variables
 
 
-
-
         //start of diff variables ----vvv
         cudaStatus = cudaMalloc((void**)&diffOut20, diffOut20_N* sizeof(float));//final value, second derivative matrix
         if (cudaStatus != cudaSuccess) {
@@ -496,6 +508,11 @@ int main(int argc, char *argv[])
             fprintf(stderr, "cudaMalloc failed! 6");
             goto Error;
         }
+        cudaStatus = cudaMalloc((void**)&diffOut20_temp2, diffOut20_N_full2 * sizeof(float));//final value, second derivative matrix
+        if (cudaStatus != cudaSuccess) {
+            fprintf(stderr, "cudaMalloc failed! 6");
+            goto Error;
+        }
 
         cudaStatus = cudaMalloc((void**)&diffOut21, diffOut21_N* sizeof(float));//final value, second derivative matrix
         if (cudaStatus != cudaSuccess) {
@@ -503,7 +520,13 @@ int main(int argc, char *argv[])
             goto Error;
         }
 
-        cudaStatus = cudaMalloc((void**)&diffOut21_temp, diffOut21_N_full * sizeof(float)); //temp for intermeidate first derivative step
+        cudaStatus = cudaMalloc((void**)&diffOut21_temp, diffOut21_N_full * sizeof(float)); //temp for intermediate first derivative step
+        if (cudaStatus != cudaSuccess) {
+            fprintf(stderr, "cudaMalloc failed! 7");
+            goto Error;
+        }
+
+        cudaStatus = cudaMalloc((void**)&diffOut21_temp2, diffOut21_N_full2 * sizeof(float)); //temp for intermediate first derivative step
         if (cudaStatus != cudaSuccess) {
             fprintf(stderr, "cudaMalloc failed! 7");
             goto Error;
@@ -518,15 +541,12 @@ int main(int argc, char *argv[])
         //end of diff variables ^^^------------
 
 
-
-
-        //start of corr allocation vvv-----
+        //corr allocation
         cudaStatus = cudaMalloc((void**)&corr, N* sizeof(float));
         if (cudaStatus != cudaSuccess) {
             fprintf(stderr, "cudaMalloc failed! 9");
             goto Error;
         }
-
 
 
         cudaStatus = cudaMalloc((void**)&prev_image, N * sizeof(float));//prev_image same size as input image, (tmpArray)
@@ -535,13 +555,13 @@ int main(int argc, char *argv[])
             goto Error;
         }
 
-        cudaStatus = cudaMalloc((void**)&tmpArray, N * sizeof(float));//tmpArray has the original device input copied over to it, but this is iteratively modified for the BF procedure
+        cudaStatus = cudaMalloc((void**)&tmpArray, N * sizeof(float));
         if (cudaStatus != cudaSuccess) {
             fprintf(stderr, "cudaMalloc failed! 11");
             goto Error;
         }
 
-        cudaStatus = cudaMalloc((void**)&outArray, N * sizeof(float));//tmpArray has the original device input copied over to it, but this is iteratively modified for the BF procedure
+        cudaStatus = cudaMalloc((void**)&outArray, N * sizeof(float));
         if (cudaStatus != cudaSuccess) {
             fprintf(stderr, "cudaMalloc failed! 12");
             goto Error;
@@ -562,12 +582,12 @@ int main(int argc, char *argv[])
             fprintf(stderr, "init image cudaMemcpy failed!");
             goto Error;
         }
-        cudaStatus = cudaMemcpy(tmpArray, originalImg, sizeof(float) * N, cudaMemcpyHostToDevice);
+        cudaStatus = cudaMemcpy(tmpArray, oDeviceSrc.data(), sizeof(float) * N, cudaMemcpyHostToDevice);
         if (cudaStatus != cudaSuccess) {
             fprintf(stderr, "init tmpArray cudaMemcpy failed!");
             goto Error;
         }
-       
+
 
 	    for(int i = 0 ;i<maxIter;i++){
 
@@ -581,9 +601,12 @@ int main(int argc, char *argv[])
             */
             
             /*output of convolution array = oDeviceDst.data()*/
+
             eStatusNPP = nppiFilter_32f_C1R(tmpArray, devPitch, oDeviceDst.data(),
                 dstPitch, oSizeROI, deviceKernel, kernelSize, oAnchor);
             
+            outArray = oDeviceDst.data();
+
             /*Single Channel Filter for 64 bit image and 64 bit kernel
 
                 Docs: https://docs.nvidia.com/cuda/npp/group__image__filter.html#gaf354d8f2b2c134503abaee1f004cef37
@@ -605,9 +628,6 @@ int main(int argc, char *argv[])
 
             cudaDeviceSynchronize();//intended to ensure all previous steps are completed before the next step
 
-            //outArray = oDeviceDst.data();//this is just a pointer, for readability.(This is never changed)
-
-
             /*
                 Splicing array for subsequent gradient compuation.
                 GPU implementation of:
@@ -619,10 +639,9 @@ int main(int argc, char *argv[])
 
             */
             CudaWrapper::MatrixGradientSplice_Device(tmpArray_spliced, tmpArray);
-            CudaWrapper::MatrixGradientSplice_Device(outArray_spliced, oDeviceDst.data());
+            CudaWrapper::MatrixGradientSplice_Device(outArray_spliced, outArray);
 
             cudaDeviceSynchronize();
-
             /*gradient computation. GPU implementation of:
 
                 gradTmp = numpy.gradient(tmp_spliced)
@@ -655,8 +674,14 @@ int main(int argc, char *argv[])
                 Dimensions of diff arrays: Rows = 4157, Columns = 2029
 
            */
-            CudaWrapper::MatrixSecondDiff_RowDevice(diffOut20, oDeviceDst.data(), diffOut20_temp);
-            CudaWrapper::MatrixSecondDiff_ColDevice(diffOut21, oDeviceDst.data(), diffOut21_temp);
+
+            CudaWrapper::MatrixSecondDiff_RowDevice(diffOut20, outArray, diffOut20_temp, diffOut20_temp2);
+            CudaWrapper::MatrixSecondDiff_ColDevice(diffOut21, outArray, diffOut21_temp, diffOut21_temp2);
+
+            float* diffTemp0_host = (float*)malloc(diffOut20_N_full * sizeof(float));
+            float* diffTemp1_host = (float*)malloc(diffOut21_N_full * sizeof(float));
+            float* diffTemp0_host2 = (float*)malloc(diffOut20_N_full2 * sizeof(float));
+            float* diffTemp1_host2 = (float*)malloc(diffOut21_N_full2 * sizeof(float));
 
             cudaDeviceSynchronize();
 
@@ -713,8 +738,8 @@ int main(int argc, char *argv[])
                 }
 
                 double diff_final = 0;
-                for (int i = 0; i < blocksPerGrid; i++) {
-                    diff_final += diff_arrHost[i];
+                for (int k = 0; k < blocksPerGrid; k++) {
+                    diff_final += diff_arrHost[k];
                 }
                 std::cout << "diff:" << diff_final << std::endl;
 
@@ -745,8 +770,7 @@ int main(int argc, char *argv[])
         CudaWrapper::matrixIncrementSplice_Device(image, corr);
 
 
-
-        std::cout << "NppiFilter error status " << eStatusNPP << std::endl; // prints 0 (no errors) //-6 is NPP_SIZE_ERROR (ROI Height or ROI width are negative)
+        std::cout << "NppiFilter error status " << eStatusNPP << std::endl; // prints 0 (no errors) //
  
 
         cudaStatus = cudaMemcpy(final_image, image, sizeof(float) * N, cudaMemcpyDeviceToHost);
@@ -773,109 +797,61 @@ int main(int argc, char *argv[])
 
         cudaFree(diffOut20);
         cudaFree(diffOut21);
+        cudaFree(diffOut20_temp);
+        cudaFree(diffOut20_temp2);
+        cudaFree(diffOut21_temp);
+        cudaFree(diffOut21_temp2);
         cudaFree(second);
 
         cudaFree(corr);
 
         cudaFree(tmpArray);
+        cudaFree(tmpArray_spliced);
         cudaFree(outArray);
         cudaFree(prev_image);
 
+        cudaFree(image);
+
         cudaFree(diff_arr);
         free(diff_arrHost);
+
+        nppiFree(oDeviceSrc.data());
+        nppiFree(oDeviceDst.data());
         //------------------
 
         cudaDeviceSynchronize();//maybe helps for more accurate timing?
-        //END OF Brighter-fatter computation
-
         long long totalConvTime = stop_timer(convTimer, "NPP convolution time:");
 
+        //std::cout << "Inner OUTPUTS of Brighter-Fattered processed DST image: " << std::endl;
+        //for (int row = 50;row < 52;row++) {
+        //    for (int col = 50;col < 55;col++) {
+        //        int index = row * C + col;
 
-        int badappleCount = 0;
-        std::set<int> badRows;
-        std::cout << "RESULTING HOST IMAGE DATA from oDeviceSrc:"<<std::endl;
-        for (int i = 0;i < imgSize;i++) {//just prints first row of values
+        //        std::cout << "CORR Origin: " << "row: " << row << "; col: " << col << "; value: " << corrOrigin[index] << std::endl;
+        //        std::cout<<"CORR Added: " << "row: " << row << "; col: " << col << "; value: " << corr_host[index] << std::endl;
+        //        std::cout<<"INPUT: " << "row: " << row << "; col: " << col << "; value: " << originalImg[index] << std::endl;
+        //        std::cout <<"OUTPUT: "<< "row: " << row << "; col: " << col << "; value: " << final_image[index] << std::endl;
+        //        std::cout <<"ACTUAL: "<< "row: " << row << "; col: " << col << "; value: " << compareImg[index] << std::endl;
+        //        std::cout << std::endl;
 
-            //float p32bit = final_image[i]//oHostDst.data()[i];
-            
-            textConvolved[i] = final_image[i];//oHostDst.data()[i];
- 
-            if (abs(final_image[i] - compareImg[i]) > 1) {//classified as "bad" if predicted differs by more than 10 from actual (I THINK)
+        //    }
+        //}
 
+        double mse_image = meanSquaredImages(final_image, compareImg, imgSize);
+        double mse_corr = meanSquaredImages(corr_host, corrOrigin, imgSize);
+        double maxError_img = maxError(final_image, compareImg, imgSize);
+        double maxError_corr = maxError(corr_host, corrOrigin, imgSize);
 
-                //std::cout << "8-bit convolved data: " << p8bit << std::endl;
-                //std::cout << "32-bit convolved data:" << p32bit << "\n" << std::endl;
-                int row = i / (imgDimX);
-                //int col = i % imgDimX //- 1;
-                //std::cout << "Row: " << row << " / " << "Column: " << col << std::endl;
-                badRows.insert(row);
+        std::cout << "Mean squared error of final result: " << mse_image << std::endl;
+        std::cout << "Mean squared error of correction matrix: " << mse_corr << std::endl;
+        std::cout << "Max error percentage of final result: " << maxError_img << std::endl;
+        std::cout << "Max error percentage of correction matrix: " << maxError_corr << std::endl;
 
-                badappleCount++;
-            }
-        }
-
-
-        int discardRows = imgDimX * 30;//discard 30 rows
-        int inspectRows = imgDimX * 472;
-
-        std::cout << "Inner OUTPUTS of Brighter-Fattered processed DST image: " << std::endl;
-        for (int row = 50;row < 52;row++) {
-            for (int col = 50;col < 55;col++) {
-                int index = row * C + col;
-
-                std::cout << "CORR Origin: " << "row: " << row << "; col: " << col << "; value: " << corrOrigin[index] << std::endl;
-                std::cout<<"CORR Added: " << "row: " << row << "; col: " << col << "; value: " << corr_host[index] << std::endl;
-                std::cout<<"INPUT: " << "row: " << row << "; col: " << col << "; value: " << originalImg[index] << std::endl;
-                std::cout <<"OUTPUT: "<< "row: " << row << "; col: " << col << "; value: " << final_image[index] << std::endl;
-                std::cout <<"ACTUAL: "<< "row: " << row << "; col: " << col << "; value: " << compareImg[index] << std::endl;
-                std::cout << std::endl;
-
-            }
-        }
-
-
-
-        double badappleCount_db = badappleCount;
-
-        //bad apples are outlying values that screw everything up. Could be edge pixels.
-        std::cout << "Bad apple count: " << badappleCount << std::endl;
-        std::cout << "Bad apple percentage of image: " << badappleCount_db / imgSize * 100 << std::endl;
-        //std::cout << "Bad rows contains:";
-        //for (std::set<int>::iterator it = badRows.begin(); it != badRows.end(); ++it)
-        //    std::cout << ' ' << *it;
-        
-        long mse = meanSquaredImages(textConvolved, compareImg, imgSize);
-        long mse_corr = meanSquaredImages(corr_host, corrOrigin, imgSize);
-        long avgConvolvedPixel = avgPixelValue(compareImg, imgSize);
-        long avgConvolvedPixel_corr = avgPixelValue(corrOrigin, imgSize);
-        long root_mse = sqrt(mse);
-        long root_mse_corr = sqrt(mse_corr);
-        long percentage = (root_mse/ avgConvolvedPixel) *100.0;
-        long percentage_corr = (root_mse_corr / avgConvolvedPixel) * 100.0;
-        float convZeroCount = zeroCount(compareImg, imgSize);
-
-        std::cout << "avgConvolvedPixel: " << avgConvolvedPixel << std::endl;
-        std::cout << "avgConvolvedPixel_corr: " << avgConvolvedPixel_corr << std::endl;
-
-        std::cout << "Zero count: " << convZeroCount << std::endl;
-        //float mseWithOriginal = meanSquaredImages(originalImg, compareImg, imgSize);
-        std::cout << "Mean squared error of final result: " << mse << std::endl;
-        std::cout << "Mean squared error for corr image: " << mse_corr << std::endl;
-        std::cout << "Root MSE of final result: " << root_mse << std::endl;
-        std::cout << "Root MSE of corr image: " << root_mse_corr << std::endl;
-
-        std::cout << "Root MSE as a percentage of avg destination pixel: " << percentage << std::endl;
-        std::cout << "Corr Root MSE as a percentage of avg actual corr image: " << percentage << std::endl;
-        //std::cout << "MSE between original input image and compareImg: " << mseWithOriginal << std::endl;
-        //std::cout << "Root MSE between original input image and compareImg: " << sqrt(mseWithOriginal) << std::endl;
-        
-
-        //end code from SO
-        nppiFree(oDeviceSrc.data());
-        nppiFree(oDeviceDst.data());
     
         long long totalTime = stop_timer(start_time, "Total time:");
 
+        free(corr_host);
+        free(final_image);
 
         exit(EXIT_SUCCESS);
     }

@@ -23,8 +23,8 @@ namespace CudaWrapper{
 
 	//functions relevant to the diff step of the Brighter_Fatter
 	void MatrixDiffRowSplice_Device(float* dev_c, float* diffOut20);
-	void MatrixSecondDiff_RowDevice(float* dev_c, float* dev_a, float* temp);
-	void MatrixSecondDiff_ColDevice(float* dev_c, float* dev_a, float* temp);
+	void MatrixSecondDiff_RowDevice(float* dev_c, float* dev_a, float* temp, float* temp2);
+	void MatrixSecondDiff_ColDevice(float* dev_c, float* dev_a, float* temp, float* temp2);
 	void MatrixDiffProductSum_Device(float* dev_c, float* tmpArray, float* diffOut20, float* diffOut21);
 
 	//fucntions relevant to corr step of Brighter-Fatter
