@@ -251,8 +251,8 @@ int main(int argc, char *argv[])
         std::string word, t, q, filename, compareFilename, corrFilename;
         
         // filename of the file
-        filename = "inputImgOG.txt";//input image textfile
-        compareFilename = "finalImgOG.txt";//output image for comparison
+        filename = "inputImgOG2.txt";//input image textfile
+        compareFilename = "finalImgOG2.txt";//output image for comparison
         corrFilename = "corr.txt"; //output correlation image for comparison
 
         file.open(filename.c_str());
@@ -591,7 +591,7 @@ int main(int argc, char *argv[])
 
 	    for(int i = 0 ;i<maxIter;i++){
 
-	        std::cout<<"Iteration: "<<i<<std::endl;
+	        //std::cout<<"Iteration: "<<i<<std::endl;
 
             /*Single Channel Filter for 32 bit image and 32 bit kernel 
             (precision loss possible, since kernel from LSST code is originally 64 bit)
