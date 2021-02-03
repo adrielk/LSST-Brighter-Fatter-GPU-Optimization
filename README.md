@@ -23,5 +23,5 @@ Much of the brighter-fatter correction algorithm can be parallelized on the GPU.
 - The main code is in the brighterFatter_GPU.cpp file
 - Helper CUDA kernels are in matrixOpsFuncs.cu and matrix_ops.cuh
 
-## Speed-up Results:
+## Speed-up Results and Error:
 - [Results](https://docs.google.com/spreadsheets/d/1lHfqa3vAcOzV9VrahLMfkYolysIajMqwmt9a368h-rA/edit?usp=sharing)
