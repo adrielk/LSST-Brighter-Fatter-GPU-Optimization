@@ -82,6 +82,18 @@ double maxError(float* img1, float* img_true, int imgSize) {
     return max_percent;//p_error;
 }
 
+double maxErrorAbsolute(float* img1, float* img_true, int imgSize) {
+    double maxError = abs(img1[0] - img_true[0]);
+
+    for (int i = 1;i < imgSize;i++) {
+        double err = abs(img1[i] - img_true[i]);
+        if (err > maxError) {
+            maxError = err;
+        }
+    }
+
+    return maxError;
+}
 
 void printMaxAndMin(float* img, int imgSize) {
     double min = img[0];
@@ -402,9 +414,9 @@ int main(int argc, char** argv)
     fillKernelArray("bfKernel.txt", kdata, kSize);
 
     // filename of the file
-    filename = "inputImgOG.txt";
-    compareFilename = "finalImgOG.txt";
-    corrFilename = "corr.txt";
+    filename = "inputImgOG3.txt";
+    compareFilename = "finalImgOG3.txt";
+    corrFilename = "corr3.txt";
 
     // opening file
     file.open(filename.c_str());
@@ -763,12 +775,14 @@ int main(int argc, char** argv)
     double mse_image = meanSquaredImages(image, compareImg, imgSize);
     double mse_corr = meanSquaredImages(corr, corrOrigin, imgSize);
     double maxError_img = maxError(image, compareImg, imgSize);
-    double maxError_corr = maxBrightPixelError(corr, corrOrigin, imgSize);
+    double maxError_corr = maxErrorAbsolute(corr, corrOrigin, imgSize);//maxBrightPixelError(corr_host, corrOrigin, imgSize);
+    double maxError_result = maxErrorAbsolute(image, compareImg, imgSize);
 
     std::cout << "Mean squared error of final result: " << mse_image << std::endl;
     std::cout << "Mean squared error of correction matrix: " << mse_corr << std::endl;
     std::cout << "Max error percentage of final result: " << maxError_img << std::endl;
-    std::cout << "Max error percentage of correction matrix: " << maxError_corr << std::endl;
+    std::cout << "Max error absolute of final result:" << maxError_result << std::endl;
+    std::cout << "Max error absolute of correction matrix: " << maxError_corr << std::endl;
 
     return EXIT_SUCCESS;
 }

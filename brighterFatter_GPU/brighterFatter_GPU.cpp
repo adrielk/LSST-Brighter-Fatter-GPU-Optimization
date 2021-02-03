@@ -190,6 +190,19 @@ double maxError(float* img1, float* img_true, int imgSize) {
     return max_percent;//p_error;
 }
 
+double maxErrorAbsolute(float* img1, float* img_true, int imgSize) {
+    double maxError = abs(img1[0] - img_true[0]);
+
+    for (int i = 1;i < imgSize;i++) {
+        double err = abs(img1[i] - img_true[i]);
+        if (err > maxError) {
+            maxError = err;
+        }
+    }
+
+    return maxError;
+}
+
 void printMaxAndMin(float* img, int imgSize) {
     double min = img[0];
     double max = img[0];
@@ -858,6 +871,7 @@ int main(int argc, char *argv[])
 
         
         /*The following loads the resulting difference between input and output images into a textfile for visualizing*/
+        /*
         if (result.is_open())
         {
             for (int row = 0;row < imgDimY;row++) {
@@ -885,7 +899,7 @@ int main(int argc, char *argv[])
             actual.close();
         }
         else std::cout << "Unable to open file";
-        
+        */
       
 
         //freeing memory
@@ -942,12 +956,15 @@ int main(int argc, char *argv[])
         double mse_image = meanSquaredImages(final_image, compareImg, imgSize);
         double mse_corr = meanSquaredImages(corr_host, corrOrigin, imgSize);
         double maxError_img = maxError(final_image, compareImg, imgSize);
-        double maxError_corr = maxBrightPixelError(corr_host, corrOrigin, imgSize);
+        double maxError_corr = maxErrorAbsolute(corr_host, corrOrigin, imgSize);//maxBrightPixelError(corr_host, corrOrigin, imgSize);
+        double maxError_result = maxErrorAbsolute(final_image, compareImg, imgSize);
 
         std::cout << "Mean squared error of final result: " << mse_image << std::endl;
         std::cout << "Mean squared error of correction matrix: " << mse_corr << std::endl;
         std::cout << "Max error percentage of final result: " << maxError_img << std::endl;
-        std::cout << "Max error percentage of correction matrix: " << maxError_corr << std::endl;
+        std::cout << "Max error absolute of final result:" << maxError_result << std::endl;
+        std::cout << "Max error absolute of correction matrix: " << maxError_corr << std::endl;
+        
 
     
         long long totalTime = stop_timer(start_time, "Total time:");
