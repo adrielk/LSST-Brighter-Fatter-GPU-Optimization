@@ -27,4 +27,4 @@ Much of the brighter-fatter correction algorithm can be parallelized on the GPU.
 - [Results](https://docs.google.com/spreadsheets/d/1lHfqa3vAcOzV9VrahLMfkYolysIajMqwmt9a368h-rA/edit?usp=sharing)
 
 ## Technical Report:
-This is the [link](https://home.fnal.gov/~mwang/lsst/adriel/RTN-015.pdf) to the technical report discussing the results and methods in more detail
+The [technical report](https://home.fnal.gov/~mwang/lsst/adriel/RTN-015.pdf) discusses the results and methods in more detail
